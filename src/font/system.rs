@@ -20,6 +20,7 @@ use super::fallback::{Fallback, Fallbacks, MonospaceFallbackInfo, PlatformFallba
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FontMatchKey {
     pub(crate) not_emoji: bool,
+    pub(crate) not_priority_family: bool,
     pub(crate) font_weight_diff: u16,
     pub(crate) font_stretch_diff: u16,
     pub(crate) font_style_diff: u8,
@@ -35,13 +36,28 @@ impl FontMatchKey {
         let not_emoji = !face.post_script_name.contains("Emoji");
         let font_weight_diff = attrs.weight.0.abs_diff(face.weight.0);
 
-        let variable_weight_match = font_weight_diff != 0
-            && db.with_face_data(face.id, |font_data, face_index| {
-                let font_ref = skrifa::FontRef::from_index(font_data, face_index).ok()?;
-                let axis = font_ref.axes().get_by_tag(skrifa::Tag::new(b"wght"))?;
-                let w = attrs.weight.0 as f32;
-                Some(w >= axis.min_value() && w <= axis.max_value())
-            }) == Some(Some(true));
+        // Prioritize fonts that are within the same family rather than the weight
+        // when the family name is explicitly requested
+        let not_priority_family = match &attrs.family {
+            fontdb::Family::Name(name) => face
+                .families
+                .first()
+                .map_or(true, |(check, _)| !name.eq_ignore_ascii_case(check)),
+            _ => true,
+        };
+
+        // TODO: this changes which fonts are returned by default
+        /*
+          let variable_weight_match = font_weight_diff != 0
+              && db.with_face_data(face.id, |font_data, face_index| {
+                  let font_ref = skrifa::FontRef::from_index(font_data, face_index).ok()?;
+                  let axis = font_ref.axes().get_by_tag(skrifa::Tag::new(b"wght"))?;
+                  let w = attrs.weight.0 as f32;
+                  Some(w >= axis.min_value() && w <= axis.max_value())
+              }) == Some(Some(true));
+        */
+        let variable_weight_match = false;
+
         let font_weight = face.weight.0;
         let font_stretch_diff = attrs.stretch.to_number().abs_diff(face.stretch.to_number());
         let font_stretch = face.stretch.to_number();
@@ -58,6 +74,7 @@ impl FontMatchKey {
         let id = face.id;
         FontMatchKey {
             not_emoji,
+            not_priority_family,
             font_weight_diff,
             font_stretch_diff,
             font_style_diff,
