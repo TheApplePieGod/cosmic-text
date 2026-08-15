@@ -20,6 +20,7 @@ use super::fallback::{Fallback, Fallbacks, MonospaceFallbackInfo, PlatformFallba
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FontMatchKey {
     pub(crate) not_emoji: bool,
+    pub(crate) not_family: bool,
     pub(crate) font_weight_diff: u16,
     pub(crate) font_stretch_diff: u16,
     pub(crate) font_style_diff: u8,
@@ -33,6 +34,13 @@ impl FontMatchKey {
     fn new(attrs: &Attrs, face: &FaceInfo, db: &fontdb::Database) -> FontMatchKey {
         // TODO: smarter way of detecting emoji
         let not_emoji = !face.post_script_name.contains("Emoji");
+        let not_family = match &attrs.family {
+            fontdb::Family::Name(name) => face
+                .families
+                .first()
+                .map_or(true, |(check, _)| !name.eq_ignore_ascii_case(check)),
+            _ => false,
+        };
         let font_weight_diff = attrs.weight.0.abs_diff(face.weight.0);
 
         let variable_weight_match = font_weight_diff != 0
@@ -58,6 +66,7 @@ impl FontMatchKey {
         let id = face.id;
         FontMatchKey {
             not_emoji,
+            not_family,
             font_weight_diff,
             font_stretch_diff,
             font_style_diff,
